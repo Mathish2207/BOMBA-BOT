@@ -31,6 +31,11 @@ function formatEmojiForDisplay(emoji) {
   return RAW_ID_REGEX.test(emoji) ? `<:emoji:${emoji}>` : emoji;
 }
 
+function parseColorInput(input) {
+  const hexMatch = input.trim().match(/^#?([0-9A-Fa-f]{6})$/);
+  return hexMatch ? `#${hexMatch[1].toUpperCase()}` : null;
+}
+
 async function resolveReactable(guild, input) {
   const parsed = parseEmojiInput(input);
   if (parsed.type === 'unicode') {
@@ -98,6 +103,19 @@ const data = new SlashCommandBuilder()
       .setName('delete')
       .setDescription("Supprime le suivi d'un message de rôle (ne supprime pas le message Discord).")
       .addStringOption((opt) => opt.setName('message_id').setDescription('ID du message').setRequired(true)),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('edit')
+      .setDescription("Modifie le titre, la description ou la couleur d'un message de rôle existant.")
+      .addStringOption((opt) => opt.setName('message_id').setDescription('ID du message').setRequired(true))
+      .addStringOption((opt) => opt.setName('titre').setDescription("Nouveau titre de l'embed").setRequired(false))
+      .addStringOption((opt) =>
+        opt.setName('description').setDescription("Nouvelle description de l'embed").setRequired(false),
+      )
+      .addStringOption((opt) =>
+        opt.setName('couleur').setDescription('Nouvelle couleur hexadécimale, ex: #5865F2').setRequired(false),
+      ),
   );
 
 async function handleCreate(interaction) {
@@ -106,20 +124,20 @@ async function handleCreate(interaction) {
   const description = interaction.options.getString('description');
   const couleurInput = interaction.options.getString('couleur');
 
-  let couleur = 0x5865f2;
+  let colorHex = null;
   if (couleurInput) {
-    const hexMatch = couleurInput.trim().match(/^#?([0-9A-Fa-f]{6})$/);
-    if (!hexMatch) {
+    colorHex = parseColorInput(couleurInput);
+    if (!colorHex) {
       await interaction.reply({
         content: 'La couleur doit être un code hexadécimal valide, ex: `#5865F2`.',
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
-    couleur = parseInt(hexMatch[1], 16);
   }
+  const colorInt = colorHex ? parseInt(colorHex.slice(1), 16) : 0x5865f2;
 
-  const embed = new EmbedBuilder().setTitle(titre).setColor(couleur);
+  const embed = new EmbedBuilder().setTitle(titre).setColor(colorInt);
   if (description) embed.setDescription(description);
 
   let sentMessage;
@@ -139,6 +157,8 @@ async function handleCreate(interaction) {
     channel_id: channel.id,
     message_id: sentMessage.id,
     title: titre,
+    description,
+    color: colorHex,
   });
 
   if (dbError) {
@@ -411,6 +431,104 @@ async function handleDelete(interaction) {
   });
 }
 
+async function handleEdit(interaction) {
+  const messageId = interaction.options.getString('message_id', true).trim();
+  const titreInput = interaction.options.getString('titre');
+  const descriptionInput = interaction.options.getString('description');
+  const couleurInput = interaction.options.getString('couleur');
+
+  if (titreInput === null && descriptionInput === null && couleurInput === null) {
+    await interaction.reply({ content: 'Rien à modifier.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  let colorHexInput = null;
+  if (couleurInput !== null) {
+    colorHexInput = parseColorInput(couleurInput);
+    if (!colorHexInput) {
+      await interaction.reply({
+        content: 'La couleur doit être un code hexadécimal valide, ex: `#5865F2`.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+  }
+
+  const { data: roleMessage, error: fetchError } = await supabase
+    .from('role_messages')
+    .select('id, channel_id, message_id, title, description, color')
+    .eq('guild_id', interaction.guildId)
+    .eq('message_id', messageId)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error('Erreur Supabase :', fetchError);
+    await interaction.reply({ content: 'Erreur lors de la lecture de la base de données.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!roleMessage) {
+    await interaction.reply({
+      content: 'Aucun message de rôle enregistré avec cet ID sur ce serveur.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const newTitle = titreInput ?? roleMessage.title;
+  const newDescription = descriptionInput !== null ? descriptionInput : roleMessage.description;
+  const newColorHex = couleurInput !== null ? colorHexInput : roleMessage.color;
+  const newColorInt = newColorHex ? parseInt(newColorHex.slice(1), 16) : 0x5865f2;
+
+  const embed = new EmbedBuilder().setTitle(newTitle).setColor(newColorInt);
+  if (newDescription) embed.setDescription(newDescription);
+
+  let channel;
+  let discordMessage;
+  try {
+    channel = await interaction.guild.channels.fetch(roleMessage.channel_id);
+    discordMessage = await channel.messages.fetch(roleMessage.message_id);
+  } catch (error) {
+    await interaction.reply({
+      content: 'Le message Discord associé est introuvable (a-t-il été supprimé manuellement ?).',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  try {
+    await discordMessage.edit({ embeds: [embed] });
+  } catch (error) {
+    console.error("Erreur lors de l'édition du message :", error);
+    await interaction.reply({
+      content: 'Impossible de modifier le message. Vérifiez les permissions du bot.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from('role_messages')
+    .update({
+      title: newTitle,
+      description: newDescription,
+      color: newColorHex,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', roleMessage.id);
+
+  if (updateError) {
+    console.error('Erreur Supabase lors de la mise à jour du role_message :', updateError);
+    await interaction.reply({
+      content: 'Le message Discord a été modifié, mais la mise à jour en base de données a échoué. Réessayez.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await interaction.reply({ content: 'Message mis à jour.', flags: MessageFlags.Ephemeral });
+}
+
 async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
   try {
@@ -419,6 +537,7 @@ async function execute(interaction) {
     if (sub === 'remove-role') return await handleRemoveRole(interaction);
     if (sub === 'list') return await handleList(interaction);
     if (sub === 'delete') return await handleDelete(interaction);
+    if (sub === 'edit') return await handleEdit(interaction);
   } catch (error) {
     console.error(`Erreur lors de l'exécution de /role-message ${sub} :`, error);
     const payload = { content: 'Une erreur inattendue est survenue.', flags: MessageFlags.Ephemeral };
