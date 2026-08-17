@@ -1,0 +1,9 @@
+.git
+.github
+.gitignore
+.env
+.env.example
+README.md
+node_modules
+supabase
+*.log

@@ -1,0 +1,19 @@
+{
+  "name": "bomba-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord Bomba — attribution de rôles par réaction",
+  "main": "src/index.js",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy-commands": "node src/lib/deployCommands.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  }
+}
