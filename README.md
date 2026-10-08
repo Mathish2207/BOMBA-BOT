@@ -24,6 +24,23 @@ Toutes les commandes sont réservées aux membres ayant la permission Discord **
 
 ---
 
+### Annonces des Mass
+
+Quand un Mass est créé sur le site Bomba, le bot le poste dans un salon
+(mention d'un rôle, date, compo, bouton « S'inscrire » vers le site). Le bot
+vérifie les nouveaux Mass toutes les 20 secondes ; chaque Mass n'est annoncé
+qu'une fois (colonne `activities.discord_announced_at`).
+
+- `/annonce-mass config salon:#salon role:@rôle` choisit le salon et le rôle à mentionner (rôle facultatif).
+- `/annonce-mass statut` affiche la configuration, `/annonce-mass desactiver` arrête les annonces.
+
+Ces commandes demandent la permission Discord **Gérer le serveur**. Le bot doit
+pouvoir voir le salon, y envoyer des messages et intégrer des liens ; pour
+mentionner un rôle non mentionnable, il lui faut aussi « Mentionner @everyone,
+@here et tous les rôles ».
+
+Variable facultative : `SITE_URL` (par défaut `https://bomba-tmk.netlify.app`).
+
 ## 1. Prérequis manuels — configuration Discord
 
 À faire **avant** le premier déploiement du bot :
@@ -43,6 +60,7 @@ Toutes les commandes sont réservées aux membres ayant la permission Discord **
 | `DISCORD_GUILD_ID` | ID du serveur, pour déployer les commandes en guild-scoped |
 | `SUPABASE_URL` | URL du projet Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | Clé service role Supabase |
+| `SITE_URL` | Facultatif — adresse du site pour les liens d'inscription (défaut : `https://bomba-tmk.netlify.app`) |
 
 Copier `.env.example` vers `.env` pour le développement local (jamais commité, déjà dans `.gitignore`). Sur Discloud, ces valeurs sont injectées automatiquement à chaque déploiement via GitHub Actions.
 
@@ -117,13 +135,16 @@ bomba-bot/
   src/
     index.js
     commands/roleMessage.js
+    commands/massAnnounce.js
     events/ready.js
     events/messageReactionAdd.js
     events/messageReactionRemove.js
     lib/discordClient.js
     lib/supabase.js
     lib/deployCommands.js
+    lib/massAnnouncer.js
   supabase/migrations/0001_role_messages.sql
+  supabase/migrations/0003_mass_announcements.sql
   discloud.config
   package.json
   .env.example

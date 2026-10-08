@@ -3,13 +3,21 @@ const { MessageFlags } = require('discord.js');
 const { client } = require('./lib/discordClient');
 const { deployCommands } = require('./lib/deployCommands');
 const roleMessageCommand = require('./commands/roleMessage');
+const massAnnounceCommand = require('./commands/massAnnounce');
+const { startMassAnnouncer } = require('./lib/massAnnouncer');
 const readyEvent = require('./events/ready');
 const reactionAddEvent = require('./events/messageReactionAdd');
 const reactionRemoveEvent = require('./events/messageReactionRemove');
 
-const commands = new Map([[roleMessageCommand.data.name, roleMessageCommand]]);
+const commands = new Map([
+  [roleMessageCommand.data.name, roleMessageCommand],
+  [massAnnounceCommand.data.name, massAnnounceCommand],
+]);
 
-client.once(readyEvent.name, readyEvent.execute);
+client.once(readyEvent.name, (readyClient) => {
+  readyEvent.execute(readyClient);
+  startMassAnnouncer(readyClient);
+});
 client.on(reactionAddEvent.name, reactionAddEvent.execute);
 client.on(reactionRemoveEvent.name, reactionRemoveEvent.execute);
 
