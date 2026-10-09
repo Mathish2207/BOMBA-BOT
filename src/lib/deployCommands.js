@@ -1,7 +1,6 @@
 require('dotenv').config();
 const { REST, Routes } = require('discord.js');
 const roleMessageCommand = require('../commands/roleMessage');
-const massAnnounceCommand = require('../commands/massAnnounce');
 
 async function deployCommands() {
   const { DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID } = process.env;
@@ -13,7 +12,7 @@ async function deployCommands() {
   }
 
   const rest = new REST().setToken(DISCORD_TOKEN);
-  const body = [roleMessageCommand.data.toJSON(), massAnnounceCommand.data.toJSON()];
+  const body = [roleMessageCommand.data.toJSON()];
 
   const result = await rest.put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID, DISCORD_GUILD_ID), { body });
 
